@@ -1,0 +1,78 @@
+.atwho-view {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: none;
+    margin-top: 18px;
+    background: #fff;
+    border: 1px solid #DDD;
+    border-radius: 3px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, .1);
+    min-width: 120px;
+    z-index: 10
+}
+ul.atwho-view-ul{
+    width: 25em;
+}
+
+ul.atwho-view-ul div.id{
+    color: #bbbbbb;
+    float: right;
+}
+ul.atwho-view-ul span.title{
+    font-weight: bold;
+    font-size: 110%;
+}
+ul.atwho-view-ul span.title:before{
+    content: '《';
+}
+ul.atwho-view-ul span.title:after{
+    content: '》';
+}
+div#at-view-novellist ul.atwho-view-ul span.title:before {
+    content: '＜';
+}
+div#at-view-novellist ul.atwho-view-ul span.title:after {
+    content: '＞';
+}
+ul.atwho-view-ul div.id:after{
+    content: '#';
+}
+ul.atwho-view-ul div.author{
+    margin-left: 1em;
+}
+
+.atwho-view .cur {
+    color: #065fb9;
+}
+
+.atwho-view .cur small {
+}
+
+.atwho-view strong {
+    color: #36F
+}
+
+.atwho-view .cur strong {
+    font: bold
+}
+
+.atwho-view ul {
+    list-style: none;
+    padding: 0;
+    margin: auto
+}
+
+.atwho-view ul li {
+    display: block;
+    padding: 5px 10px;
+    border-top: 1px solid #EEE;
+    border-bottom: 1px solid #DDD;
+    cursor: pointer
+}
+
+.atwho-view small {
+    font-size: smaller;
+    color: #777;
+    font-weight: 400
+}

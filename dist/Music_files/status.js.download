@@ -1,0 +1,536 @@
+// this is a js file that deal with displaying readstatus related thing in js
+
+function getPRatio() {
+	pos = parseFloat($(this).find('.vote.pos').attr('votecount'));
+	neg = parseFloat($(this).find('.vote.neg').attr('votecount'));
+	n = (pos + neg + 2);
+	p = (pos + 1) / n;
+	// calculate the score based on the recorded value
+	p_ratio = (p + 1.96 * 1.96 / (2 * n) - 1.96 * Math.sqrt(p * (1 - p) / n + 1.96 * 1.96 / (4 * n * n))) / (1 + 1.96 * 1.96 / n);
+	$(this).attr('p_ratio', p_ratio);
+}
+
+function onOrderPRatio() {
+    // if not on a page that requires ordering, ignore it
+    if (getOrdering()){
+        $('#novel-reviews li').each(getPRatio);
+        $('#status-list .statusitem').each(getPRatio);
+    }
+}
+
+function truncate(element, cutLen) {
+	var elements = element.contents();
+	if (elements.length == 1) {
+		var text = element.text();
+		element.text(text.substring(0, text.length - cutLen) + "……");
+		return;
+	}
+	var hide = false;
+	for (var i = elements.length - 1; i >= 0; i--) {
+		var item = elements.eq(i);
+		var textLen = item.text().length;
+		if (textLen < cutLen) {
+			cutLen -= textLen;
+			item.remove();
+		} else {
+			truncate(item, cutLen);
+			break;
+		}
+	};
+}
+
+function foldReview() {
+    if ($(this).data('fold-checked')){
+        return;
+    }
+    $(this).data('fold-checked', true);
+
+	var lineHeight = parseFloat($("body").css("font-size"));
+	// traverse through each review calculate the length and hide paras beyond a certain length
+	var elements = $(this).children().not('a, span, .voter');
+	var textLen = 0;
+	var height = 0;
+	var prevLen;
+	var hide = false;
+	var expendBt = $('<a class="expand" href="javascript:;">查看全文</a>');
+
+	var foldBt = $('<a class="fold" href="javascript:;">收起↑</a>');
+	foldBt.click(function() {
+		li = $(this).parent().parent();
+		li.find('.to-hide').hide();
+		li.find('.dotmore').show();
+		li.find('.expand').parent().show();
+		$(this).hide();
+	});
+
+	expendBt.click(function() {
+		$(this).parent().siblings().show();
+		$(this).parent().parent().find('.dotmore').hide();
+		$(this).parent().hide();
+		$(this).parent().parent().find('.fold').show();
+	});
+	expendBt = $('<p></p>').append(expendBt);
+	for (var i = 0; i < elements.length; i++) {
+		var item = elements.eq(i);
+		if (item.hasClass('voter')) {
+			continue;
+		}
+		if (item.is('span, a')) {
+			continue;
+		}
+		if (hide) {
+			item.hide();
+			item.addClass('to-hide');
+			continue;
+		}
+		height += item.height();
+		prevLen = textLen;
+		textLen += item.text().length;
+		if (textLen > 200) {
+			if (height < lineHeight * 12) {
+				hide = true;
+				if (i == elements.length - 1) {
+					continue;
+				}
+				$(this).append($('<p class="dotmore">………………</p>'));
+				$(this).append(expendBt);
+				$(this).prepend(foldBt);
+			} else {
+				hide = true;
+				// if the paragraph is too long, cut it so that only 200 characters remains
+				var cutLen = textLen - 200;
+				var replacement = item.clone();
+				item.after(replacement);
+				item.addClass('to-hide');
+				item.hide();
+				replacement.addClass('dotmore');
+				truncate(replacement, cutLen);
+				$(this).append(expendBt);
+				$(this).prepend(foldBt);
+			}
+			continue;
+		}
+		if (height >= lineHeight * 12) {
+			hide = true;
+			if (i == elements.length - 1) {
+				continue;
+			}
+			$(this).append($('<p class="dotmore">………………</p>'));
+			$(this).append(expendBt);
+			$(this).prepend(foldBt);
+		}
+	};
+}
+
+function hideLongReview() {
+	var reviews = $('#novel-reviews li, #my-review ul, #status-list .statuscontent>blockquote');
+	reviews.each(foldReview);
+}
+
+$(function() {
+	onOrderPRatio();
+	hideLongReview();
+	$('#my-review ul p, #my-review ul blockquote').addClass('BSHARE_TEXT');
+
+	// handle loading for review voter
+	$(document.body).on("click", '.vote', function(){
+		$.proxy(attachVoteLoading, this)();
+		return false;
+	});
+
+
+    $(document.body).hoverIntent(function(){
+            $(this).hide();
+            $(this).siblings().filter('.hidden').fadeIn('fast').css('display', 'inline-block');
+    }, function(){}, '.my-status a.expand')
+	$(document.body).hoverIntent(function(){},
+		function(){
+			// if it is expanded, fold it
+			if (!($(this).find('.expand').is(':visible'))){
+				$(this).find('.hidden').hide();
+				$(this).find('.expand').show();
+			}
+		}, '.my-status.new-status');
+})
+
+// attach the loading style for voting
+function attachVoteLoading(){
+	$(this).addClass("spinner-color");
+}
+
+function onLoadReviewErr(XMLHttpRequest, textStatus, errorThrown) {
+	XMLHttpRequest.responseText = "加载评论失败";
+	globalErrorHandler(XMLHttpRequest, textStatus, errorThrown);
+	$('.loader').html('加载失败_(:з」∠)_……请手动点击上面的排序链接');
+}
+
+function onVoteErr(XMLHttpRequest, textStatus, errorThrown) {
+	// alert('投票失败，请查看是否登录');
+	// showErrorDialog('投票失败，请查看是否', true);
+	globalErrorHandler(XMLHttpRequest, textStatus, errorThrown);
+	$(this).removeClass("spinner-color");
+}
+
+// find whether order by p_ratio, DESC or ASC
+function getOrdering() {
+	url = window.location.href;
+	// alert(url);
+	// if in all review page
+	if (url.search(/novelReviews/i) >= 0) {
+		if (url.search(/sort/i) < 0) {
+			return 'desc';
+		}
+		if (url.search(/sort:p_ratio/i) < 0 || url.search(/sort:follow/i) < 0 ) {
+			return false;
+		}
+		if (url.search(/direction:desc/i) >= 0) {
+			return 'desc';
+		}
+		if (url.search(/direction:asc/i) >= 0) {
+			return 'asc';
+		}
+	}
+	// if in novel detail page
+	if (url.search(/novels\/view/i) >= 0) {
+		if ($('.revieworder.type-p_ratio').hasClass('cur') || 
+			$('.revieworder.type-follow').hasClass('cur')) {
+			return 'desc';
+		}
+	}
+	return false;
+}
+
+function slideDown(item) {
+	item.slideDown({
+		'start': function() {
+			eTop = item.offset().top;
+			rTop = eTop - $(window).scrollTop();
+			if (rTop < 0 || rTop > $(window).height()) {
+				$('body').scrollTop(item.offset().top - (0.1 * screen.height));
+			}
+		}
+	});
+}
+
+function onVote(data, textStatus) {
+	selector = '.statusitem';
+	item = $(this).closest('.statusitem');
+	if (item.length <= 0) {
+		item = $(this).closest('li');
+		selector = 'li';
+	}
+	$(this).parent().replaceWith(data.html);
+	// get the ordering the the page
+	order = getOrdering();
+
+	displayMessage(data.message);
+	// alert(data.message);
+
+	if (order) {
+		// get new score
+		item.each(getPRatio);
+		if (order == 'asc') {
+			sign = -1;
+		} else {
+			sign = 1;
+		}
+		scroll = true;
+		var score = sign * item.attr('p_ratio');
+		if ((sign * item.prev().attr('p_ratio') >= score || item.prev().length == 0) && (sign * item.next(selector).attr('p_ratio') <= score ||
+				/* if this is the last item on the last page do not move item*/
+                /* or if this in in novel/view page do not move item*/
+				(item.next(selector).length == 0 && ($('#pages span').length == 0 || $('#pages span').last().hasClass('current'))))) {
+			// do nothing
+			// alert('do nothing');
+			scroll = false;
+		} else if (sign * item.siblings(selector).first().attr('p_ratio') < score) {
+			// put to top
+			// alert('put to top');
+			item.slideUp(400, function() {
+				item.prependTo(item.parent());
+				slideDown(item);
+			});
+			// item.prependTo(item.parent());
+		} else if (sign * item.siblings(selector).last().attr('p_ratio') >= score) {
+			// move down and disappear
+			// alert('move down');
+			// if there are more pages after this
+			pages = $('#pages span');
+			if (pages.length > 0 && !pages.last().hasClass('current')) {
+				item.hide('fast');
+				scroll = false;
+			} else {
+				item.slideUp(400, function() {
+					item.appendTo(item.parent());
+					slideDown(item);
+				});
+			}
+		} else {
+			item.siblings(selector).each(function() {
+				if (sign * $(this).attr('p_ratio') >= score &&
+					sign * $(this).next().attr('p_ratio') < score) {
+					item.data('bro', $(this));
+					item.slideUp(400, function() {
+						$(this).data('bro').after(item);
+						slideDown(item);
+					});
+				}
+			});
+		}
+
+	}
+}
+
+
+function onDeleteStatusErr(XMLHttpRequest, textStatus, errorThrown) {
+	globalErrorHandler(XMLHttpRequest, textStatus, errorThrown);
+}
+
+function novelViewLoaded() {
+	types = ['rate', 'modified', 'review_length'];
+	$('.revieworder.type-p_ratio').eq(0).data('reverse', $('.revieworder.type-p_ratio').eq(0));
+	$('.revieworder.type-p_ratio').eq(0).addClass('default-order');	// if the group is not current, display the default-order
+	if ($('.revieworder.type-follow').length > 0){
+		$('.revieworder.type-follow').eq(0).data('reverse', $('.revieworder.type-follow').eq(0));
+		$('.revieworder.type-follow').eq(0).addClass('default-order');	// if the group is not current, display the default-order
+	}
+	for (idx in types) {
+		type = types[idx];
+		links = $('.revieworder.type-' + type);
+		links.eq(0).data('reverse', links.eq(1));
+		links.eq(0).addClass('default-order');
+		links.eq(1).data('reverse', links.eq(0));
+	}
+	$('.revieworder').each(function() {
+		$(this).data('title', $(this).text());
+	});
+	$('.revieworder').click(function() {
+		$('.revieworder').each(function() {
+			$(this).removeClass('cur');
+			$(this).removeClass('hidden');
+		});
+		$(this).data('reverse').addClass('cur');
+		$(this).addClass('cur');
+		// the link just clicked with be hidden
+		$(this).addClass('hidden');
+		// unless the reverse is also the link
+		$(this).data('reverse').removeClass('hidden');
+	});
+	$(function() {
+		$('.revieworder.type-p_ratio').eq(0).click();
+	});
+}
+
+function onLoadReview(data, textStatus) {
+	$('#novel-reviews').text('');
+	$('#novel-reviews').append($(data));
+	// if what is loaded is ordered by p_ratio, calculate them
+	if (getOrdering()) {
+		onOrderPRatio();
+	}
+	hideLongReview();
+}
+
+function onDeleteStatus(data, textStatus) {
+	// handle error in some way
+	// set up the background
+	// bg = $('<div id="paneBackground"></div>')
+	// 	// display the panel
+	// $('body').append(bg);
+	// panel = $('<div class="paneBoard message"></div>');
+	// panel.text(data.message);
+	// panel.css('top', $(window).scrollTop() + $(window).height() * 0.5);
+	// bg.append(panel);
+	displayMessage(data.message);
+
+	// replace my-status 
+	var blocks = $($.trim(data.html));
+	if (data.update == 'novel'){
+		$('#my-status').replaceWith(blocks.filter('#my-status'));
+		$('#reviews .edit-link').replaceWith(blocks.filter('.edit-link'));
+		$('#my-review').replaceWith(blocks.filter('#my-review'));
+	}else if (data.update == 'novel_idx'){
+		// if the add is done on novel index page, we need to first determine the 
+		// list item that the change is performed on so we first extract novel id
+		var url = blocks.find('a.edit').attr('href');
+		var prefix = url.match(/^(.*edit\/\d+\/)/)[1];
+		var target = $('a.edit[href^="'+prefix+'"]');
+		target.closest('.my-status').replaceWith(blocks);
+	}else if (data.update == 'remove'){
+		$(this).closest('.item').remove();
+	}
+	$('body').append(blocks.filter('script'));
+	// $('#paneBackground').click(function() {
+	// 	$(this).dequeue().fadeOut('fast', function() {
+	// 		$(this).remove()
+	// 	})
+	// });
+	// $('#paneBackground').delay(1000).fadeOut('fast', function() {
+	// 	$(this).remove();
+	// });
+}
+
+function onLoadAddStatusErr(XMLHttpRequest, textStatus, errorThrown) {
+	// alert('评论失败，请查看是否登录')
+	// showErrorDialog('评论失败，请查看是否', true);
+	//XMLHttpRequest.responseText = "程序错误，请查看是否登录";
+	globalErrorHandler(XMLHttpRequest, textStatus, errorThrown);
+}
+
+function onLoadNewReviews(data, textStatus) {
+	onLoadAddStatus(data, textStatus);
+	$('.paneBoard').addClass('short'); // don't let the pane take up 100% height
+}
+
+function onLoadNewReviewsErr(XMLHttpRequest, textStatus, errorThrown) {
+	globalErrorHandler(XMLHttpRequest, textStatus, errorThrown);
+}
+
+function onAddDoneErr(XMLHttpRequest, textStatus, errorThrown) {
+	globalErrorHandler(XMLHttpRequest, textStatus, errorThrown);
+}
+
+function onAddDone(novelId, data, textStatus) {
+	// for now, ajax means request from novellist
+	// board = $('#paneBackground > div');
+	// board.text(data.message);
+	// board.addClass('message');
+	// board.css('top', $(window).scrollTop() + $(window).height() * 0.5);
+
+	// $('#paneBackground').click(function() {
+	// 	$(this).dequeue().fadeOut('fast', function() {
+	// 		$(this).remove()
+	// 	})
+	// });
+	// $('#paneBackground').delay(1000).fadeOut('fast', function() {
+	// 	$(this).remove();
+	// });
+	
+	if (data.error){
+		onAddDoneErr({responseText: data.message}, null, null);
+		return;
+	}
+
+	// remove the cookie
+	eraseCookie('review_' + novelId);
+
+
+	displayMessage(data.message, false);
+	if (data.update == 'index') {
+		// for future bug fix: 
+		// with index, if the same book is edited twice and both published to front
+		// then it would appear as two entries
+		// I don't suppose any people would do something like this, but ... who knows
+		// in addition, when tags are selected, sometimes user's new status should not appear
+		// but it seems hard to deal with all cases, so I assumed it will appear
+		// final question, do we actually need to put user's new status at the top 
+		// and scroll there?
+		if (data.html){
+			$('#status-list').prepend($($.trim(data.html)));
+			$("html, body").animate({
+				scrollTop: 0
+			}, "fast", function(){
+				$('#paneBackground > div').css('top', $(window).height() * 0.5);
+			});
+		}
+	} else if (data.update == 'novel') {
+		var blocks = $($.trim(data.html));
+		$('#my-status').replaceWith(blocks.filter('#my-status'));
+		if ($('#my-review').length > 0) {
+			$('#my-review').replaceWith(blocks.filter('#my-review'));
+			$('#reviews .edit-link').replaceWith(blocks.filter('.edit-link'));
+		} else {
+			$('#reviews').prepend(blocks.filter('#my-review'));
+			$('#reviews').prepend(blocks.filter('.edit-link'));
+		}
+		$('body').append(blocks.filter('script'));
+		$('#my-review ul').each(foldReview);
+		$('#my-review ul p, #my-review ul blockquote').addClass('BSHARE_TEXT');
+	} else if (data.update == 'novel_idx') {
+		// if the add is done on novel index page, we need to first determine the 
+		// list item that the change is performed on so we first extract novel id 
+		var blocks = $($.trim(data.html));
+		var url = blocks.find('a.edit').attr('href');
+		var novelId = url.match(/edit\/(\d+)\//)[1];
+		var prefix = url.match(/^(.*edit\/\d+\/)/)[1];
+		var target = $('a.edit[href^="'+prefix+'"]');
+		target.closest('.my-status').replaceWith(blocks);
+	} else if (data.update == 'novellist' || data.update == 'user'){
+		$('a[novel_id="'+novelId+'"]').closest('.item').replaceWith($($.trim(data.html)));
+	} else if (data.update == 'readstatus'){
+        $('#main h1').siblings().remove();
+        var blocks = $($.trim(data.html));
+        $('#main h1').after(blocks);
+    }
+}
+
+// display error message and login link
+// function showErrorDialog(message, logIn) {
+// 	onLoadAddStatus('<span>' + message + '</span>', '');
+// 	if (logIn) {
+// 		board = $('#paneBackground > div');
+// 		board.addClass('message');
+// 		board.css('top', $(window).scrollTop() + $(window).height() * 0.5);
+// 		board.append('<a href="' + loginUrl + '">登陆</a>');
+// 	}
+// }
+
+function onLoadAddStatus(data, textStatus) {
+	// set up the background
+	bg = $('<div id="paneBackground"></div>')
+	// display the panel
+	$('body').append(bg);
+	panel = $('<div class="paneBoard"></div>');
+	panel.css('top', $(window).scrollTop() + 10);
+	panel.append($(data));
+	bg.append(panel);
+
+	// get the maxinum height
+	// ensure that there will be no white space in background
+	// maxHeight = $(window).height();
+	// panelBottom = $(window).scrollTop() + 20 + panel.outerHeight();
+	// if (maxHeight < panelBottom){
+	// 	maxHeight = panelBottom;
+	// }
+	bg.css('min-height', $(document).height());
+
+	// create a close button
+	closeBt = $('<span class="panel-closelink">X</span>');
+	panel.prepend(closeBt);
+	closeBt.click(function() {
+		$('#paneBackground').fadeOut('fast', function() {
+			$(this).remove();
+		});
+	});
+
+	// able to close the pop out window when clicking on the sides
+	panel.click(function(e) {
+		e.stopPropagation();
+	});
+	bg.click(function() {
+		// $('#paneBackground').fadeOut('fast', function() {
+		// 	$(this).remove();
+		// });
+	});
+
+	// hide the notice box, only show on hover over questionmark
+	notice = panel.find('#notice');
+	if (notice.length > 0) {
+		notice.hide();
+		label = $('label[for="ReadstatusReview"]');
+		label.closest('div').css('position', 'relative');
+		question = $('<p class="helper">查看样式标记</p>');
+		label.after(question);
+		notice.appendTo(question);
+		question.hoverIntent({
+			over: function() {
+				notice.fadeIn('slow');
+			},
+			out: function() {
+				notice.fadeOut('slow');
+			},
+			timeout: 100
+		});
+
+	}
+}

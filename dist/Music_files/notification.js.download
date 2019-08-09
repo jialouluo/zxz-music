@@ -1,0 +1,213 @@
+/**
+ * Created by xinyizhang on 2014/7/3.
+ */
+$( function() {
+    // handle the display of notification nav
+    var nav = $('.notification-nav');
+    if(nav.length && !(nav.attr('processed'))){
+        nav.attr('processed',true);
+        nav.find('div').addClass('cp').attr('title','展开/收起');
+        nav.find('li:not(.sub-nav)').addClass('nav-item');
+        nav.find('.nav-item').each(function(){
+            var type = $(this).attr('type');
+            $(this).wrapInner("<a title='"+$(this).text()+"'></a>");
+            $(this).find('a').attr('href',notificationUrl+'/'+ type);
+            $(this).find('a').addClass('cp');
+        });
+        nav.find('.label').click(function(){
+            $(this).siblings('ul').toggle();
+        });
+        var cur = nav.find('li[type='+nav.attr('cur')+']');
+        if (cur.length){
+            cur.addClass('cur');
+            nav.find('ul').hide();
+            cur.parentsUntil(nav, 'ul').show();
+        }
+    }
+
+    // handle the display of form
+    var form = $('#NotificationSettingEditForm');
+    if (form.length && !(form.attr('processed'))){
+        form.attr('processed', true);
+
+        form.find('input[type="checkbox"] + label')
+            .prepend("<span class='check-state'></span>");
+
+        // make the first checkbox in fieldset decide whether the
+        // rest should be shown
+        form.find('fieldset .checkbox:first-child').click(function(){
+            if($(this).find('input[type="checkbox"]').is(":checked")){
+                $(this).siblings().show("fast");
+            }else{
+                $(this).siblings().hide("fast");
+            }
+        });
+        form.find('fieldset .checkbox:first-child').each(function(){
+            if(!$(this).find('input[type="checkbox"]').is(":checked")){
+
+                $(this).siblings().hide("fast");
+            }
+        })
+
+        // fold entries
+        form.find('h2').click(function(){
+            $(this).siblings().toggle("fast");
+            var icon = $(this).find('.icon');
+            if (icon.html() == '-'){
+                icon.html("/");
+            }else{
+                icon.html("-");
+            }
+
+        })
+    }
+
+    //handle the display of glimpse-boxes
+    var allN = $('#all-notification');
+    if (allN.length && !(allN.attr('processed'))){
+        allN.attr('processed', true);
+        allN.find('.glimpse-box').each(attachGlimpse);
+    }
+
+    if(userId){
+        showNotification();
+    }
+});
+
+// used to load glimpse content into the box
+function attachGlimpse(){
+    var content = $("<div></div>");
+    $(this).append(content);
+    content.hide();
+    content.load($(this).find('h2 a').attr('href')+"/ajax",
+    function(){
+        content = $(this);
+        content.find('a.read-all').remove();
+        content.find('a.read-more').remove();
+        content.show('fast');
+
+        var box = content.closest('.glimpse-box');
+        var container = box.closest('.glimpse-container');
+        var otherC = container.siblings();
+        if ((container.innerHeight() - box.outerHeight(true)) > otherC.height()){
+            box.remove();
+            otherC.append(box);
+        }
+    });
+}
+
+function showNotification(){
+    $.ajax({
+        url: notificationUrl+"/glimpse/ajax/"+userId,
+        type: 'GET',
+        dataType: 'html',
+        success: function (ret) {
+            var container = $('#notification-container');
+            container.html('');
+//            ul = $('<ul class="cp"></ul>');
+//            message = $(ret);
+//            ul.append(message);
+            var higherList = $(ret);
+
+            // if the auth failed
+            if (container.find('div#flashMessage').length){
+                return;
+            }
+
+            var ul = higherList.find('ul');
+            // count the number of new messages
+            var count = 0;
+            ul.find('li').each(function(index){
+                count = count +parseInt($(this).attr('val'));
+            });
+
+            ul.find('li').click(display);
+            ul.find('li').css({'position':'relative'})
+
+            // will later change the url to index
+            var icon = $('<a title="全部消息" href="'+notificationUrl+'" class="icon" id="top-icon">m</a>');
+            container.append(icon);
+
+            if (count>0){
+                // if the number is more than 10, forget about it
+                if(count>9){
+                    count = ''
+                }
+                icon.append($('<span>'+count+'</span>'));
+                icon.css({'padding-right':0});
+            }else{
+                // if there is not new message, do not display the list
+                icon.css({'padding-bottom':0});
+                return;
+            }
+
+//            higherList = $('<div class="higher-list"></div>');
+//            higherList.append(ul);
+
+            var readAll = higherList.find('.all-notification');
+            readAll.click(funcReadAll);
+            // will later change the url to index
+//            higherList.append(readAll);
+            // add a link to set all as read
+            container.append(higherList);
+        }
+    });
+}
+
+function funcReadAll(){
+    $.ajax({
+        url: notificationUrl + "/readAll",
+        type: 'POST',
+        dataType: 'json',
+        cache: false
+    }).done(function(data){
+        alert(data['data']['message']);
+        showNotification();
+    });
+    event.preventDefault();
+}
+
+function display(){
+	if ($(this).attr('glimpse')){
+	    var lowerList = $('<div class="lower-list">加载中……</div>');
+        var container = $('#notification-container');
+	    container.find('.lower-list').remove();
+        container.find('.arrow').remove();
+	    $(this).append($('<div class="arrow">>></div>'));
+		$(this).append(lowerList);
+		lowerList.load($(this).attr('link'),
+			function (ret) {
+				$(this).find('a.read-all').click(function(){
+                    $.ajax({
+                        url: notificationUrl + "/readAll/" + $(this).attr('alias'),
+                        type: 'POST',
+                        dataType: 'json',
+                        cache: false
+                    }).done(function(data){
+                        if (data['data']['succeed']){
+                            var num = parseInt(container.find('.lower-list').closest('li').attr('val'));
+                            var total = parseInt(container.find('.icon span').html());
+                            container.find('.lower-list').closest('li').remove();
+//                          container.find('.lower-list').remove();
+//                          container.find('.arrow').remove();
+                            if (total && (total - num)){
+                                container.find('.icon span').html(total - num);
+                            }else{
+                                showNotification();
+                            }
+                        }
+                    });
+                    event.preventDefault();
+                });
+
+
+                var link = lowerList.find('.read-more').attr('href');
+                lowerList.find('.link').click(function(){
+                    document.location.href = link;
+                });
+			}
+		);
+	}else{
+		window.location.href=$(this).attr('link')
+	}
+}

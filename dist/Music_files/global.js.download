@@ -1,0 +1,335 @@
+// also handle user-novellist
+$(document).ready(function () {
+    //返回顶部按钮
+    showtopbutton();
+    if ($('#backtotop').length>0) {
+        $('#backtotop').css('left', $('#boards').offset().left);
+        $('#backtotop').click(function () {
+            $('body').animate({scrollTop: 0}, 1000);
+        });
+    }
+
+    //悬浮信息面板
+    $("#panel").mouseleave(function () {
+        $("#panel").hide();
+    });
+
+    $(document).hoverIntent(
+            function () {
+                if ($(this).parents('#notification-container, #panel').length>0) {
+                    return;
+                }
+                panelajax(this, {"user_id": $(this).attr("user_id")}, userpanelurl);
+            },
+            function () {}, ".userlink"
+            );
+    $(document).hoverIntent(
+            function () {
+                if ($(this).parents('#notification-container, #panel').length>0) {
+                    return;
+                }
+                if (typeof enableNovelLink!=='undefined'&&enableNovelLink) {
+                    panelajax(this, {"novel_id": $(this).attr("novel_id")}, novelpanelurl);
+                }
+            },
+            function () {}, ".novellink"
+            );
+
+    $(document).hoverIntent(
+            function () {
+                if ($(this).parents('#notification-container, #panel').length>0) {
+                    return;
+                }
+                if (typeof enableAuthorLink!=='undefined'&&enableAuthorLink) {
+                    panelajax(this, {"author_id": $(this).attr("author_id")}, authorpanelurl);
+                }
+            },
+            function () {}, ".authorlink"
+            );
+
+    $(document).hoverIntent(
+            function () {
+                panelajax(this, {"readstatus_id": $(this).attr("rs_id")}, inusrnl);
+            }, function () {}, ".add_to_nl"
+            );
+
+    //浏览量信息
+    if ($('#pv_slot').length>0) {
+        $.ajax({
+            url: "http://saowen.net/gapi/simpleUrlReport/"+uniqueUrl,
+            dataType: 'html',
+            success: function (data) {
+                $('#pv_slot').hide().html(data).fadeIn(800);
+            },
+            error: function () {
+                $('#pv_slot').html('获取浏览信息失败');
+            }
+        });
+    }
+
+    //flash横幅自动隐藏
+    $("#flashMessage").delay(3000).fadeOut(2000);
+
+    $(document.body).on("click", '.user-author-link', function () {
+        $.proxy(attachLoading, this)();
+        return false;
+    });
+
+    $(document.body).on("click", '.user-relation-link', function () {
+        $.proxy(attachLoading, this)();
+        return false;
+    });
+
+    $(document.body).on("click", '#fav-link-option', function () {
+        $(this).find("span:first").addClass("spinner-stay");
+        return false;
+    });
+});
+function attachLoading() {
+    var spinner = $('<div class="spinner">'+
+            '<div class="bounce1"></div>'+
+            '</div>');
+    spinner.children('div').css('background-color', $(this).css('background-color'));
+    var link = $(this);
+    var timeout = setTimeout(
+            function ()
+            {
+                link.before(spinner);
+            }, 200);
+    $(this).data('timeout', timeout);
+}
+/*
+ *	If the link is in loading state
+ * 	In this case, has data timeout, cancel the ajax request
+ */
+function verifyActive() {
+    if ($(this).data('timeout')) {
+        return false;
+    }
+    if ($(this).find('span:first').hasClass('spinner-stay')) {
+        return false; // in the case of user-novellist
+    }
+    // in the case of vote
+    if ($(this).hasClass('spinner-color')) {
+        return false;
+    }
+}
+
+function panelajax(object, ajaxdata, ajaxurl) {
+    // show the loading panel
+    $("#panel").html('<div class="tri"></div><div class="loader"><span></span><span></span><span></span><div>正在加载</div></div>');
+    $("#panel").show();
+    l = $(object).offset().left;
+    t = $(object).offset().top+28;
+    $("#panel").css("left", l);
+    $("#panel").css("top", t);
+
+    $.ajax({
+        data: ajaxdata,
+        dataType: "html",
+        success: function (data) {
+            if (data) {
+                $("#panel").html(data);
+                $("#panel").show();
+                l = $(object).offset().left;
+                t = $(object).offset().top+28;
+                h = $("#panel").height();
+                $("#panel").css("left", l);
+                $("#panel").css("top", t);
+            } else {
+                $("#panel").hide();
+            }
+        },
+        error: function (textStatus, errorThrown) {
+            $("#panel").hide();
+            // displayMessage("出错了");
+        },
+        url: ajaxurl
+    });
+}
+
+function showtopbutton() {
+    if ($('#backtotop').length>0) {
+        l = $('#content').offset().left+940-$('body').scrollLeft();
+        $('#backtotop').css('left', l);
+        var h = $('#right-nav').offset().top+$('#rsslinks').height()+500;
+        var s = $('body').scrollTop()+window.innerHeight;
+        if (h>s) {
+            $('#backtotop').hide();
+        } else {
+            $('#backtotop').show();
+        }
+        var f = $('#footer').offset().top;
+        if (f<s) {
+            $('#backtotop').css('bottom', s-f+10);
+        } else {
+            $('#backtotop').css('bottom', 10);
+        }
+    }
+}
+
+/**
+ * handle the response of add user author
+ */
+function onAddUserAuthors(data, textStatus) {
+    clearTimeout($(this).data('timeout'));
+    $(this).removeData('timeout');
+
+    $(this).siblings('.edit-link, .spinner').remove();
+    newLink = $(data);
+    inPanel = $(this).closest('#panel').length>0;
+    $(this).replaceWith(newLink);
+    if (newLink.html()=='已在黑名单'&&inPanel) {
+        newLink.eq(0).before($('<span class="edit-link edit-link-note">（刷新后生效）</span>'));
+    }
+}
+
+function onAddUserRelations(data, textStatus) {
+    clearTimeout($(this).data('timeout'));
+    $(this).removeData('timeout');
+
+    if (data['message']) {
+        if (data['success']) {
+            $(this).closest('.item, tr').remove();
+        } else {
+            // alert(data['message']);
+            displayMessage(data['message']);
+        }
+        return;
+    }
+    $(this).siblings('.user-relation-link, .spinner, .edit-link-note').remove();
+    newLink = $(data);
+    inPanel = $(this).closest('#panel').length>0;
+    $(this).replaceWith(newLink);
+    if (newLink.html()=='移出黑名单'&&inPanel) {
+        newLink.filter('a').text('已拉黑（刷新后生效）');
+    }
+}
+
+// display a little yellow box on the middle of the screen, with the given message
+// inside
+// preserve : if there is something in the paneBackgroud before, whether to keep it.
+function displayMessage(data, preserve) {
+    if (typeof (preserve)==='undefined')
+        preserve = true;
+    if ($.type(data)==="string") {
+        var wrapper = $('<span></span>');
+        data = wrapper.text(data);
+    }
+    var oldPane = null;
+    if ($('#paneBackground').length) {
+        if (preserve) {
+            $('#paneBackground').prop({'id': 'paneBackgroundOld'}).hide();
+        } else {
+            $('#paneBackground').remove();
+        }
+    }
+    bg = $('<div id="paneBackground"></div>');
+    bg.css('min-height', $(document).height());
+
+    // display the panel
+    $('body').append(bg);
+    panel = $('<div class="paneBoard message"></div>');
+    panel.append(data);
+    panel.css('top', $(window).scrollTop()+$(window).height()*0.5);
+    bg.append(panel);
+    $('#paneBackground').click(function () {
+        $(this).dequeue().fadeOut('fast', function () {
+            $(this).remove();
+            if (preserve) {
+                $('#paneBackgroundOld').prop({'id': 'paneBackground'}).show();
+            }
+        })
+    });
+//    $('#paneBackground').delay(5000).fadeOut('fast', function () {
+//        $(this).remove();
+//        if (preserve) {
+//            $('#paneBackgroundOld').prop({'id': 'paneBackground'}).show();
+//        }
+//    });
+}
+
+function globalErrorHandler(XMLHttpRequest, textStatus, errorThrown) {
+    try {
+        var response = jQuery.parseJSON(XMLHttpRequest.responseText);
+        displayMessage(response['name']);
+        // alert(response['name']);
+        if (response['authErr']) {
+            setTimeout(
+                    function () {
+                        window.location.replace(loginUrl);
+                    }, 1000);
+        }
+    } catch (err) {
+        // alert(XMLHttpRequest.responseText);
+        displayMessage(XMLHttpRequest.responseText);
+    }
+}
+
+/**
+ * handle the error response of add user author
+ */
+function onAddUserAuthorsErr(XMLHttpRequest, textStatus, errorThrown) {
+    globalErrorHandler(XMLHttpRequest, textStatus, errorThrown);
+    // alert('操作失败，查看是否登录');	// we might want to change how the error alert is shown
+    clearTimeout($(this).data('timeout'));
+    $(this).removeData('timeout');
+    $(this).parent().find('.spinner').remove();
+}
+/**
+ * handle the error reponse of add user relation
+ */
+function onAddUserRelationsErr(XMLHttpRequest, textStatus, errorThrown) {
+    globalErrorHandler(XMLHttpRequest, textStatus, errorThrown);
+    clearTimeout($(this).data('timeout'));
+    $(this).removeData('timeout');
+    $(this).parent().find('.spinner').remove();
+}
+
+/**
+ * handle the response of user fav/unfav novellist
+ */
+function onAddUserNovellist(data, textStatus) {
+    $(this).replaceWith($(data));
+}
+function onAddUserNovellistErr(XMLHttpRequest, textStatus, errorThrown) {
+    // alert(textStatus);
+    displayMessage(textStatus);
+    $('#fav-link-option span').removeClass('spinner-stay');
+}
+
+window.onresize = showtopbutton;
+window.onscroll = showtopbutton;
+/*
+ * some functions related to cookie handling
+ * since it may be used globally, i will just put it here
+ */
+function createCookie(name, value, days) {
+    var expires;
+
+    if (days) {
+        var date = new Date();
+        date.setTime(date.getTime()+(days*24*60*60*1000));
+        expires = "; expires="+date.toGMTString();
+    } else {
+        expires = "";
+    }
+    document.cookie = encodeURIComponent(name)+"="+encodeURIComponent(value)+expires+"; path=/";
+}
+
+function readCookie(name) {
+    var nameEQ = encodeURIComponent(name)+"=";
+    var ca = document.cookie.split(';');
+    for (var i = 0; i<ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0)===' ')
+            c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ)===0)
+            return decodeURIComponent(c.substring(nameEQ.length, c.length));
+    }
+    return null;
+}
+
+function eraseCookie(name) {
+    createCookie(name, "", -1);
+}
